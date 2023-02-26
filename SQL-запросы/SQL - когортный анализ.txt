@@ -1,0 +1,31 @@
+select 
+	month_first_order,
+	commulate_orders / all_buyers as frequency
+from (
+	select 
+		month_order,
+		month_first_order,
+		-- считаем для каждой когорты число buyers в первый месяц и накопленную сумму заказов
+		first_value (buyers) over (partition by month_first_order order by month_order) as all_buyers,
+		sum(orders) over (order by month_order) as commulate_orders
+	from (
+		select
+			month_order,
+			month_first_order,
+			count(user_id) as orders,
+			count(distinct user_id) as buyers
+		from (
+			select 
+				user_id,
+				--revenue ,
+				extract(month from date) as month_order,
+				--считаю первую дату (месяц) заказа:
+				extract(month from first_value(date) over (partition by user_id order by date)) as month_first_order
+			from client_orders t
+		) as f
+		--здесь выводим только январскую когорту, затем цифру в фильтре можно менять и смотреть результаты других когорт
+		where month_first_order = 1
+		group by month_order, month_first_order
+		order by orders desc
+	) as k
+) as t

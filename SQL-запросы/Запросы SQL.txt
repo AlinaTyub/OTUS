@@ -1,0 +1,323 @@
+ЗАНЯТИЕ 1.
+
+select
+	o.date 
+	,o.country
+	,o.orders
+	,o.revenue
+--	Посчитаем трафичную конверсию
+	,(float4(o.orders) / float4(o.visits)) * 100 as CR
+from orders as o
+where
+--	o.country like 'Russi%' or o.country like 'Finland'
+	o.country in ('Russia', 'Finland') and o.orders > 1300 and o.date >= '2022-01-01'
+
+
+
+ЗАНЯТИЕ 2.
+
+
+select
+--	tc.client_id
+--	,tc.first_date_visit
+	tt.date
+	,tt.transaction_id
+--	,tt.transaction_revenue
+--	,tp.product_id 
+--	,tp.product_name 
+from train_clients tc 
+--inner join train_transactions as tt on tc.client_id = tt.client_id 
+inner join train_transactions tt using(client_id)
+left join train_products tp using (transaction_id)
+where tc.first_date_visit < tt.date 
+--left join train_transactions as tt using(client_id)
+--right join train_transactions as tt using(client_id)
+--full join train_transactions as tt using(client_id)
+--cross join train_transactions as tt
+;
+
+select
+	t."date" 
+	,t.transaction_id 
+	,t.transaction_revenue 
+from transactions t 
+inner join cl_first_date_visits c using(client_id)
+where c.first_date_visits = t."date" 
+order by t.date desc, t.transaction_revenue desc
+limit 10
+
+
+
+ЗАНЯТИЕ 3.
+
+select *
+from (
+	select 
+		o."date" 
+		,o.country
+		,o.revenue
+		,o.orders
+		,float8(o.revenue) / float8(o.orders) as aov
+	from orders o 
+) as aov_table
+where aov_table.aov > 10;
+
+select *
+from (
+	select 
+		o."date" 
+		,o.country
+		,o.visits
+		,o.orders
+		,(float8(o.orders) / float8(o.visits)) * 100 as cr
+	from orders o 
+) as cr_table
+where cr_table.cr > 1;
+
+
+with year_sales as (select
+						yr_aggr.country
+						,yr_aggr.cr
+						,yr_aggr.aov
+						,yr_aggr.revenue
+					from (
+						select
+							year_country.country
+							,year_country.revenue as revenue
+							,float8(year_country.orders) / float8(year_country.visits) * 100 as CR
+							,float8(year_country.revenue) / float8(year_country.orders) as AOV
+						from (
+							select 
+									o.country
+									,sum(o.visits) as visits
+									,sum(o.orders) as orders
+									,sum(o.revenue) as revenue 
+							from orders o
+							where o.date >= '2021-01-01' and o.date <= '2021-12-31'
+							group by o.country
+						) as year_country
+					) as yr_aggr
+					order by yr_aggr.aov desc)			
+select 
+	c.date
+	,c.country
+	,c.revenue / c.yearRevenue * 100 as revenueShare
+from(select
+		o.date
+		,o.country
+		,o.revenue
+		,ys.revenue as yearRevenue
+	from orders o
+	inner join year_sales as ys on o.country = ys.country
+	where o.date >= '2021-01-01' and o.date <= '2021-12-31'
+	order by o.country, o.date) as c
+
+
+
+ЗАНЯТИЕ 4.
+
+-- Комментарий к ДЗ: client_id считаем уникальный с помощью dinstinct
+select sum(g.count_users) from (
+	select
+		count(distinct s.client_id) as count_users 
+	from sources s
+	group by s.client_id
+	) as g
+
+	
+-- Взаимодейтвие с БД
+ Создание таблиц
+create table otrubyannikova_names (
+	id serial not null primary key
+	,name varchar not null
+)
+	
+-- Вставка данных
+insert into otrubyannikova_names (id,name) values (default, 'Отрубянникова Алина')
+insert into otrubyannikova_names (id,name) values
+												(default, 'Иванов Иван'),
+												(default, 'Петров Петр')
+												
+-- Обновление данных
+update otrubyannikova_names
+set name = 'Олегов Олег'
+where name like 'Иванов%'
+
+-- Удаление данных
+delete from otrubyannikova_names 
+where name like 'Олег%'
+
+-- Очищение БД
+truncate table otrubyannikova_names 
+	
+-- Удаление таблицы
+drop table otrubyannikova_names 
+drop table otrubyannikova_posts;
+drop table otrubyannikova_users
+
+--Вьюхи (представления)
+create view otrubyannikova_transaction_2022 as
+	select
+		t.*
+	from transactions t
+	where t."date" between '2022-01-01' and '2022-12-31'
+	
+create view otrubyannikova_transaction_first_date as
+	select
+		t.*
+		,cfdv.first_date_visits 
+	from transactions t
+	left join cl_first_date_visits cfdv using(client_id)
+	
+-- Возвращаемся к группировкам, добиваемся уникальной минимальной даты для каждого клиента
+	
+create view otrubyannikova_transaction_newusers as(
+	select
+		t.*
+		,cl_first.first_date_visits 
+	from transactions t
+	left join (
+		select
+			cl.client_id
+			,min(cl.first_date_visits) as first_date_visits
+		from cl_first_date_visits cl
+		group by cl.client_id) cl_first using(client_id)
+)
+
+
+
+ЗАНЯТИЕ 5. ОКОННЫЕ ФУНКЦИИ
+
+select
+	d.transaction_id,
+	d.transaction_revenue / d.fullRevenueClientID as share
+from (select
+	tt.client_id,
+	tt."date",
+	tt.transaction_id,
+	tt.transaction_revenue,
+	sum(tt.transaction_revenue) over () as fullRevenue,
+	sum(tt.transaction_revenue) over (partition by client_id) as fullRevenueClientID
+from train_transactions tt) as d;
+
+--delete from train_transactions 
+--where id in(
+--	select
+--		o.id
+--	from(
+--		select
+--			tt.id,
+--			tt.client_id,
+--			tt.transaction_id,
+--			tt.date,
+--			row_number() over (partition by client_id, tt.transaction_id  order by tt.date) as r
+--		from train_transactions tt) as o
+--	where r != 1);
+
+select
+	tt.client_id,
+	tt."date",
+	tt.transaction_id,
+	tt.transaction_revenue,
+	sum(tt.transaction_revenue) over (partition by client_id order by tt."date") as r,
+	-- второй способ - сделать это явно
+	sum(tt.transaction_revenue) over (partition by client_id order by tt."date" rows between unbounded preceding and current row) as r2,
+	-- накопленную сумму предыдущей и текущей строки
+	sum(tt.transaction_revenue) over (partition by client_id order by tt."date" rows between 1 preceding and current row) as r3,
+	-- unbounded following означает до последней строки окна
+	sum(tt.transaction_revenue) over (partition by client_id order by tt."date" rows between 1 preceding and unbounded following) as r4,
+	first_value(tt.date) over (partition by client_id order by tt."date" rows between 1 preceding and unbounded following) as first_date,
+	last_value(tt.date) over (partition by client_id order by tt."date" rows between 1 preceding and unbounded following) as last_date,
+	-- накопленная сумма, не включая текущую строку
+	(sum(tt.transaction_revenue) over (partition by client_id order by tt."date" rows between unbounded preceding and unbounded following)) - tt.transaction_revenue  as r5
+from train_transactions tt;
+
+select
+	t.id,
+	t.date,
+	t.transaction_revenue,
+	sum(t.transaction_revenue) over (partition by t.id order by t.date) as cum_sum,
+	-- тем, кто совершил покупки на 100 евро, полагается бонус, поэтому считаем, сколько не хватает до 100
+	(case when (100 - sum(t.transaction_revenue) over (partition by t.id order by t.date)) > 0
+			then  100 - sum(t.transaction_revenue) over (partition by t.id order by t.date)
+			else 0 end) as how_many_to_gift,
+	row_number() over (partition by t.id order by t.date)
+from transactions t 
+where t."date" between '2022-05-01' and '2022-05-31'
+
+
+
+ЗАНЯТИЕ 6. Построение открытой и закрытой воронки конверсии
+
+--select 
+--	e.event_type
+--	,count(e.event_type)
+--from events as e 
+--group by e.event_type 
+
+
+
+with cte_funnel_events as(
+	select 
+		e."userId" as user_id,
+		e."sessionId" session_id,
+		e.date,
+		e."_time",
+		e.event_type, 
+		case
+			when e.event_type like '%AddToCart%' then 'AddToCart'
+			when e.event_type like '%Transaction%' then 'Transaction'
+			else e.event_type 
+		end as funnel_step
+	from events e
+	where e.event_type not in ('isWishlistAdd', 'isViewCheckoutStep1')
+	order by 1, 2, 3, 4
+)
+-- Открытая воронка
+--select 
+--	f.funnel_step
+--	,count(distinct f.user_id) as users
+--from cte_funnel_events as f
+--group by f.funnel_step
+--order by users desc
+-- Закрытая воронка (все шаги должны быть пройдены друг за другом)
+select
+	result.step,
+	count(distinct result.user_id)
+from(
+	select
+		funnel.user_id,
+		funnel.session_id,
+		case
+			when funnel.funnel_step1 like 'isViewCatalog' and funnel.funnel_step2 like 'isViewProductCardPage' and funnel.funnel_step3 like 'AddToCart' and funnel.funnel_step4 like 'isViewCart'then 'step4'
+			when funnel.funnel_step1 like 'isViewCatalog' and funnel.funnel_step2 like 'isViewProductCardPage' and funnel.funnel_step3 like 'AddToCart' then 'step3'
+			when funnel.funnel_step1 like 'isViewCatalog' and funnel.funnel_step2 like 'isViewProductCardPage' then 'step2'
+			when funnel.funnel_step1 like 'isViewCatalog' then 'step1'
+			else null
+		end as step
+	from(
+		select
+			ff.date,
+			ff._time,
+			ff.user_id,
+			ff.session_id,
+			ff.funnel_step as funnel_step1
+			-- считаем следующие шаги
+			,lead(ff.funnel_step, 1) over (partition by ff.session_id order by ff._time) as funnel_step2
+			,lead(ff.funnel_step, 2) over (partition by ff.session_id order by ff._time) as funnel_step3
+			,lead(ff.funnel_step, 3) over (partition by ff.session_id order by ff._time) as funnel_step4
+			,lead(ff.funnel_step, 4) over (partition by ff.session_id order by ff._time) as funnel_step5
+			,lead(ff.funnel_step, 5) over (partition by ff.session_id order by ff._time) as funnel_step6
+		from(
+			select 
+				f.date,
+				f._time,
+				f.user_id,
+				f.session_id,
+				f.funnel_step,
+				lag(f.funnel_step) over (partition by session_id order by f._time) as prev_funnel_step
+			from cte_funnel_events as f
+			order by f.session_id, f._time) as ff
+		where ff.funnel_step != ff.prev_funnel_step or ff.prev_funnel_step is null) as funnel) as result
+group by result.step
+

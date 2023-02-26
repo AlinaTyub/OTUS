@@ -1,0 +1,64 @@
+with rfm as(
+ select
+  t.user_id,
+  AOV,
+  count_orders,
+  days_after_last_order,
+  case
+   when days_after_last_order <= 337 then 'недавние'
+   when days_after_last_order >= 443 then 'уходящие'
+   else 'спящие'
+  end as r,
+  case
+   when count_orders = 1 then 'разовые'
+   when count_orders >= 4 then 'частые'
+   else 'редкие'
+  end as f,
+  case
+   when AOV <= 1599 then 'низкий чек'
+   when AOV >= 2472 then 'высокий чек'
+   else 'средний чек'
+  end as m
+ from (
+  select
+   t.user_id,
+   sum(t.revenue) / count (t.revenue) as AOV,
+   count(t.date) as count_orders,
+   current_date - max(t.date) as days_after_last_order,
+   max(t.date) as max_date
+  from client_orders t
+  group by t.user_id
+  )as t
+ )
+select
+ *,
+ case
+   when (r = 'недавние' and f = 'частые' and m = 'высокий чек') then 111
+   when (r = 'недавние' and f = 'частые' and m = 'средний чек') then 112
+   when (r = 'недавние' and f = 'частые' and m = 'низкий чек') then 113
+   when (r = 'недавние' and f = 'редкие' and m = 'высокий чек') then 121
+   when (r = 'недавние' and f = 'редкие' and m = 'средний чек') then 122
+   when (r = 'недавние' and f = 'редкие' and m = 'низкий чек') then 123
+   when (r = 'недавние' and f = 'разовые' and m = 'высокий чек') then 131
+   when (r = 'недавние' and f = 'разовые' and m = 'средний чек') then 132
+   when (r = 'недавние' and f = 'разовые' and m = 'низкий чек') then 133
+   when (r = 'спящие' and f = 'частые' and m = 'высокий чек') then 211
+   when (r = 'спящие' and f = 'частые' and m = 'средний чек') then 212
+   when (r = 'спящие' and f = 'частые' and m = 'низкий чек') then 213
+   when (r = 'спящие' and f = 'редкие' and m = 'высокий чек') then 221
+   when (r = 'спящие' and f = 'редкие' and m = 'средний чек') then 222
+   when (r = 'спящие' and f = 'редкие' and m = 'низкий чек') then 223
+   when (r = 'спящие' and f = 'разовые' and m = 'высокий чек') then 231
+   when (r = 'спящие' and f = 'разовые' and m = 'средний чек') then 232
+   when (r = 'спящие' and f = 'разовые' and m = 'низкий чек') then 233
+   when (r = 'уходящие' and f = 'частые' and m = 'высокий чек') then 311
+   when (r = 'уходящие' and f = 'частые' and m = 'средний чек') then 312
+   when (r = 'уходящие' and f = 'частые' and m = 'низкий чек') then 313
+   when (r = 'уходящие' and f = 'редкие' and m = 'высокий чек') then 321
+   when (r = 'уходящие' and f = 'редкие' and m = 'средний чек') then 322
+   when (r = 'уходящие' and f = 'редкие' and m = 'низкий чек') then 323
+   when (r = 'уходящие' and f = 'разовые' and m = 'высокий чек') then 331
+   when (r = 'уходящие' and f = 'разовые' and m = 'средний чек') then 332
+   when (r = 'уходящие' and f = 'разовые' and m = 'низкий чек') then 333
+  end as rfm_group
+from rfm
